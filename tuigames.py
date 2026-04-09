@@ -1,27 +1,34 @@
 import curses
 from curses.textpad import rectangle
 
+# --- ASCII ART DEFINITIONS ---
+ART_SNAKE = ["  ____   ", " /  __\  ", " |  \/|  ", " \____/  ", "  SNAKE  "]
+
+ART_SETTINGS = ["   ___   ", "  / _ \  ", " | (_) | ", "  \___/  ", " SETTINGS"]
+
+ART_QUIT = ["  ____   ", " |  _ \  ", " | | | | ", " |_| |_| ", "  QUIT   "]
+
+CUSTOM_ART = {0: ART_SNAKE, 1: ART_SETTINGS, 2: ART_QUIT}
+
 
 def main(stdscr):
-    # Initial setup
+    # Setup
     curses.curs_set(0)
     stdscr.keypad(True)
     curses.use_default_colors()
 
-    # Define our colors
+    # Pair 1: Box & Art | Pair 2: Selection Highlight
     curses.init_pair(1, curses.COLOR_WHITE, -1)
-    curses.init_pair(2, curses.COLOR_BLACK, curses.COLOR_WHITE)
+    curses.init_pair(2, curses.COLOR_CYAN, -1)
 
-    # Grid component dimensions
-    rows, cols = 2, 3
-    box_h = 6
-    box_w = 20
-    gap_y = 2
+    # Grid Dimensions (1 Row, 3 Columns)
+    rows, cols = 1, 3
+    box_h, box_w = 8, 22
     gap_x = 4
 
-    # Calculate the total physical size of the grid
+    # Calculate total width/height for centering
     total_w = (cols * box_w) + ((cols - 1) * gap_x)
-    total_h = (rows * box_h) + ((rows - 1) * gap_y)
+    total_h = box_h
 
     current_selection = 0
 
@@ -29,69 +36,59 @@ def main(stdscr):
         stdscr.erase()
         sh, sw = stdscr.getmaxyx()
 
-        # 1. Safety Check: Ensure terminal can fit the grid + some padding
-        if sh < total_h + 4 or sw < total_w + 4:
-            warning1 = "TERMINAL TOO SMALL!"
-            warning2 = (
-                f"Current: {sw}x{sh}. Need at least: {total_w + 4}x{total_h + 4}."
-            )
-
-            stdscr.addstr(1, (sw - len(warning1)) // 2, warning1, curses.color_pair(2))
-            stdscr.addstr(2, (sw - len(warning2)) // 2, warning2)
-            stdscr.getch()
-            continue
-
-        # 2. Centering Math: Find the top-left starting coordinate for the whole grid
+        # Calculate centering coordinates
         start_y = (sh - total_h) // 2
         start_x = (sw - total_w) // 2
 
-        # 3. Centered Instructions
-        instructions = "Linux Mode: Use WASD or Arrows to navigate. Press 'q' to quit."
-        # Place instructions dynamically above the grid
-        stdscr.addstr(max(0, start_y - 2), (sw - len(instructions)) // 2, instructions)
+        # Draw the 3 Boxes
+        for i in range(3):
+            # Calculate position for each box in the row
+            x1 = start_x + (i * (box_w + gap_x))
+            y1 = start_y
+            x2, y2 = x1 + box_w, y1 + box_h
 
-        # 4. Draw the Grid
-        for i in range(6):
-            r = i // cols
-            c = i % cols
-
-            # Calculate coordinates relative to our centered starting point
-            y1 = start_y + (r * (box_h + gap_y))
-            x1 = start_x + (c * (box_w + gap_x))
-            y2 = y1 + box_h
-            x2 = x1 + box_w
-
-            # Draw the box outline
+            # 1. Draw the box border
+            stdscr.attron(curses.color_pair(1))
             rectangle(stdscr, y1, x1, y2, x2)
 
-            # Calculate center of the individual box for text
-            center_y = y1 + (box_h // 2)
-            label = f" Window {i + 1} "
+            # 2. Draw the unique ASCII Art for this index
+            art = CUSTOM_ART.get(i, ["No Art"])
+            art_start_y = y1 + (box_h - len(art)) // 2
 
-            # Apply highlight if selected
+            for line_idx, line in enumerate(art):
+                print_x = x1 + (box_w - len(line)) // 2
+                stdscr.addstr(art_start_y + line_idx, print_x, line)
+            stdscr.attroff(curses.color_pair(1))
+
+            # 3. Draw the Underline + Pointer IF selected
             if i == current_selection:
-                stdscr.attron(curses.color_pair(2))
-                stdscr.addstr(center_y, x1 + 1, label.center(box_w - 1))
-                stdscr.addstr(center_y + 1, x1 + 1, " Selected ".center(box_w - 1))
-                stdscr.attroff(curses.color_pair(2))
-            else:
-                stdscr.addstr(center_y, x1 + 1, label.center(box_w - 1))
+                underline_char = "═"
+                underline_str = underline_char * (box_w + 1)
 
-        # 5. Input Handling
+                stdscr.attron(curses.color_pair(2) | curses.A_BOLD)
+                # Place underline exactly 1 line below the box
+                stdscr.addstr(y2 + 1, x1, underline_str)
+                # Centered pointer
+                stdscr.addstr(y2 + 1, x1 + (box_w // 2), "▲")
+                stdscr.attroff(curses.color_pair(2) | curses.A_BOLD)
+
+        # Instructions Footer
+        instr = "ARROWS to Move | ENTER to Select | 'q' to Quit"
+        stdscr.addstr(sh - 1, (sw - len(instr)) // 2, instr)
+
+        # Input Handling
         key = stdscr.getch()
 
-        if key in [curses.KEY_UP, ord("w"), ord("W")]:
-            if current_selection >= cols:
-                current_selection -= cols
-        elif key in [curses.KEY_DOWN, ord("s"), ord("S")]:
-            if current_selection < (rows - 1) * cols:
-                current_selection += cols
-        elif key in [curses.KEY_LEFT, ord("a"), ord("A")]:
-            if current_selection % cols != 0:
+        if key in [curses.KEY_LEFT, ord("a"), ord("A")]:
+            if current_selection > 0:
                 current_selection -= 1
         elif key in [curses.KEY_RIGHT, ord("d"), ord("D")]:
-            if current_selection % cols != cols - 1:
+            if current_selection < 2:
                 current_selection += 1
+        elif key in [ord("\n"), curses.KEY_ENTER]:
+            # Action based on selection
+            if current_selection == 2:  # Quit option
+                break
         elif key in [ord("q"), ord("Q")]:
             break
 
